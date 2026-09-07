@@ -532,6 +532,22 @@ if [ -f "$HOME/.config/fish/config.fish" ]; then
     fi
 fi
 
+# .bashrc/config.fish only reach interactive shells. kscreenlocker_greet (KDE's
+# lock-screen greeter) is spawned by KWin/ksld as part of session
+# infrastructure, never through a login shell, so those exports never reach
+# it: it can't find the Caelestia.*/M3Shapes QML modules, fails to load the
+# custom lock screen, and silently falls back to KDE's built-in locker.
+# Plasma sources every *.sh under plasma-workspace/env/ into the whole
+# graphical session at login, which is the one place that actually
+# propagates to it.
+mkdir -p ~/.config/plasma-workspace/env
+cat > ~/.config/plasma-workspace/env/caelestia-qml-path.sh << 'ENVEOF'
+#!/bin/sh
+export QML2_IMPORT_PATH="$HOME/.local/lib/qt6/qml:$HOME/.config/quickshell/caelestia${QML2_IMPORT_PATH:+:$QML2_IMPORT_PATH}"
+export CAELESTIA_LIB_DIR="$HOME/.local/lib/caelestia"
+ENVEOF
+chmod +x ~/.config/plasma-workspace/env/caelestia-qml-path.sh
+
 mkdir -p ~/.local/bin ~/.config/systemd/user
 
 info "Installing Caelestia bin wrappers..."
