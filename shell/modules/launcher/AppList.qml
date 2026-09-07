@@ -275,6 +275,11 @@ StyledListView {
                     easing: Tokens.anim.standardDecel
                 }
             }
+            PropertyAction {
+                targets: [root.add, root.remove]
+                property: "enabled"
+                value: true
+            }
         }
     }
 
