@@ -2,6 +2,7 @@
 
 #include <qjsonarray.h>
 #include <qjsonobject.h>
+#include <ranges>
 
 namespace caelestia::settings {
 

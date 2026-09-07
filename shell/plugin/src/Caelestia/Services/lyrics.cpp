@@ -7,6 +7,7 @@
 #include <qdiriterator.h>
 #include <qfileinfo.h>
 #include <qjsonarray.h>
+#include <qjsondocument.h>
 #include <qnetworkcookiejar.h>
 #include <qsavefile.h>
 #include <qurlquery.h>

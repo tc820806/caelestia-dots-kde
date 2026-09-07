@@ -3,6 +3,7 @@
 
 #include <qdir.h>
 #include <qjsonarray.h>
+#include <qjsondocument.h>
 #include <qlocalsocket.h>
 #include <qloggingcategory.h>
 #include <qvariant.h>

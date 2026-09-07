@@ -2,7 +2,6 @@ import ".."
 import "../../../components/controls"
 import QtQuick
 import QtQuick.Controls
-import Qt.labs.synchronizer
 import Quickshell
 import Quickshell.Io
 import Quickshell.Wayland
@@ -31,11 +30,13 @@ PanelWindow {
 
     // Modes
     // TODO: Ask: sidebar AI
+    enum SnipAction { Copy, Edit, Search, CharRecognition, Record, RecordWithSound }
+
     enum SelectionMode { RectCorners, Circle }
 
     enum Phase { Select, Post }
 
-    property var action: ScreenshotAction.SnipAction.Copy
+    property var action: RegionSelection.SnipAction.Copy
 
     property var selectionMode: RegionSelection.SelectionMode.RectCorners
 
@@ -55,7 +56,11 @@ PanelWindow {
 
     property color overlayColor: Qt.rgba("#000000".r, "#000000".g, "#000000".b, 1.0 - 0.4)
 
-    property color brightSecondary: Colours.palette.m3secondary
+    property color brightText: true ? Colours.palette.m3onSurface : Colours.palette.m3surface
+
+    property color brightSecondary: true ? Colours.palette.m3secondary : Colours.palette.m3onSecondary
+
+    property color brightTertiary: true ? Colours.palette.m3tertiary : Qt.lighter(Colours.palette.m3primary)
 
     property color selectionBorderColor: brightSecondary
 
@@ -65,9 +70,15 @@ PanelWindow {
 
     property color windowFillColor: Qt.rgba(windowBorderColor.r, windowBorderColor.g, windowBorderColor.b, 1.0 - 0.85)
 
+    property color imageBorderColor: brightTertiary
+
+    property color imageFillColor: Qt.rgba(imageBorderColor.r, imageBorderColor.g, imageBorderColor.b, 1.0 - 0.85)
+
     property color onBorderColor: "#ff000000"
 
     property real targetRegionOpacity: 0.6
+
+    property bool contentRegionOpacity: false
 
     // Vars for indicators
     // Snapshot of the active workspace when the overlay opened — used to filter
@@ -77,18 +88,33 @@ PanelWindow {
     property string snapshotWorkspaceUuid: ""
 
     readonly property var windows: {
+        let arr = Array.from(KWinActiveWindowBridge.windowList || []);
+
         // Prefer the snapshotted workspace (set when overlay opens) so that
         // focusWindow() calls during hover cannot cause the filter to shift.
         const useSnapshot = root.snapshotWorkspaceId > 0 || root.snapshotWorkspaceUuid !== "";
-        const target = useSnapshot
-            ? (root.snapshotWorkspaceUuid !== "" ? root.snapshotWorkspaceUuid : root.snapshotWorkspaceId)
+        const activeId = useSnapshot ? root.snapshotWorkspaceId
             : (typeof KWinWorkspaceState !== "undefined" ? KWinWorkspaceState.activeId : 0);
+        const activeIdx = activeId > 0 ? activeId - 1 : 0;
+        const activeUuid = useSnapshot ? root.snapshotWorkspaceUuid
+            : (typeof KWinWorkspaceState !== "undefined" && KWinWorkspaceState.workspaces[activeIdx]
+                ? KWinWorkspaceState.workspaces[activeIdx].id : "");
 
-        // windowsForWorkspace owns the workspace-field semantics (numeric id /
-        // uuid, -1 = all workspaces), so hover-focus cannot drift the filter.
-        const arr = Array.from(typeof KWinActiveWindowBridge !== "undefined"
-            ? KWinActiveWindowBridge.windowsForWorkspace(target)
-            : []);
+        if (activeId > 0 || activeUuid !== "") {
+            arr = arr.filter(w => {
+                if (!w.workspace) return true;
+
+                if (typeof w.workspace.id === "number") {
+                    if (w.workspace.id === -1) return true; // On all workspaces
+                    return w.workspace.id === activeId;
+                } else if (typeof w.workspace.id === "string") {
+                    if (w.workspace.id === "") return true;
+                    return w.workspace.id === activeUuid;
+                }
+
+                return true;
+            });
+        }
 
         return arr.sort((a, b) => {
             // Sort floating=true windows before others
@@ -96,6 +122,10 @@ PanelWindow {
             return a.floating ? -1 : 1;
         });
     }
+
+    readonly property var layers: ({})
+
+    readonly property real falsePositivePreventionRatio: 0.5
 
     // Screen & interaction vars
     readonly property real monitorScale: (frozenImage.sourceSize.width > 0 && root.screen.width > 0) ? (frozenImage.sourceSize.width / root.screen.width) : (screen.devicePixelRatio || 1.0)
@@ -128,9 +158,11 @@ PanelWindow {
 
     property var mouseButton: null
 
+    property var imageRegions: []
+
     readonly property var windowRegions: RegionFunctions.filterWindowRegionsByLayers(
         root.windows,
-        []
+        root.layerRegions
     ).map(window => {
         return {
             at: [window.x - root.monitorOffsetX, window.y - root.monitorOffsetY],
@@ -141,12 +173,39 @@ PanelWindow {
         }
     })
 
+    readonly property var layerRegions: {
+        const layersOfThisMonitor = undefined
+        const topLayers = undefined
+        if (!topLayers) return [];
+        const nonBarTopLayers = topLayers
+            .filter(layer => !(layer.namespace.includes(":bar") || layer.namespace.includes(":verticalBar") || layer.namespace.includes(":dock")))
+            .map(layer => {
+            return {
+                at: [layer.x, layer.y],
+                size: [layer.w, layer.h],
+                namespace: layer.namespace,
+            }
+        })
+        const offsetAdjustedLayers = nonBarTopLayers.map(layer => {
+            return {
+                at: [layer.at[0] - root.monitorOffsetX, layer.at[1] - root.monitorOffsetY],
+                size: layer.size,
+                namespace: layer.namespace,
+            }
+        });
+        return offsetAdjustedLayers;
+    }
+
     // Config
     property bool isCircleSelection: (root.selectionMode === RegionSelection.SelectionMode.Circle)
 
     property bool showWindowOutlines: false
 
     property bool enableWindowRegions: showWindowOutlines && !isCircleSelection
+
+    property bool enableLayerRegions: true && !isCircleSelection
+
+    property bool enableContentRegions: false
 
     // Target
     property real targetedRegionX: -1
@@ -197,6 +256,30 @@ PanelWindow {
     }
 
     function updateTargetedRegion(x, y) {
+        // Image regions
+        const clickedRegion = root.imageRegions.find(region => {
+            return region.at[0] <= x && x <= region.at[0] + region.size[0] && region.at[1] <= y && y <= region.at[1] + region.size[1];
+        });
+        if (clickedRegion) {
+            root.targetedRegionX = clickedRegion.at[0];
+            root.targetedRegionY = clickedRegion.at[1];
+            root.targetedRegionWidth = clickedRegion.size[0];
+            root.targetedRegionHeight = clickedRegion.size[1];
+            return;
+        }
+
+        // Layer regions
+        const clickedLayer = root.layerRegions.find(region => {
+            return region.at[0] <= x && x <= region.at[0] + region.size[0] && region.at[1] <= y && y <= region.at[1] + region.size[1];
+        });
+        if (clickedLayer) {
+            root.targetedRegionX = clickedLayer.at[0];
+            root.targetedRegionY = clickedLayer.at[1];
+            root.targetedRegionWidth = clickedLayer.size[0];
+            root.targetedRegionHeight = clickedLayer.size[1];
+            return;
+        }
+
         // Window regions — pick the smallest (most specific) window containing the cursor
         let clickedWindow = null;
         let smallestArea = Infinity;
@@ -249,17 +332,24 @@ PanelWindow {
         screenshotDir: root.screenshotDir
         screenshotPath: root.screenshotPath
         onExited: (exitCode, exitStatus) => {
-            // Refresh the shared recorder probe so the stop-before-snip check
-            // below sees the freshest state.
-            Recorder.probeRecording();
-            root.preparationDone = true;
+            if (root.enableContentRegions) imageDetectionProcess.running = true;
+            root.preparationDone = !checkRecordingProc.running;
         }
     }
 
-    property bool isRecording: root.action === ScreenshotAction.SnipAction.Record || root.action === ScreenshotAction.SnipAction.RecordWithSound
+    property bool isRecording: root.action === RegionSelection.SnipAction.Record || root.action === RegionSelection.SnipAction.RecordWithSound
 
-    // A recording is already active: entering region-select toggles it off.
-    property bool recordingShouldStop: root.isRecording && Recorder.running
+    property bool recordingShouldStop: false
+    Process {
+        id: checkRecordingProc
+
+        running: isRecording
+        command: ["sh", "-c", "pidof gpu-screen-recorder >/dev/null && f=\"$(cat $HOME/.local/state/caelestia/record/current_recording_path 2>/dev/null)\" && [ -n \"$f\" ] && test -f \"$f\""]
+        onExited: (exitCode, exitStatus) => {
+            root.preparationDone = !screenshotProc.running
+            root.recordingShouldStop = (exitCode === 0);
+        }
+    }
 
     property bool preparationDone: false
 
@@ -270,7 +360,7 @@ PanelWindow {
     onPreparationDoneChanged: {
         if (!preparationDone) return;
         if (root.isRecording && root.recordingShouldStop) {
-            Launch.exec([Paths.absolutePath("~/.local/bin/caelestia-record")]);
+            Quickshell.execDetached([Paths.absolutePath("~/.local/bin/caelestia-record")]);
             root.dismiss();
             return;
         }
@@ -293,6 +383,46 @@ PanelWindow {
         }
     }
 
+    Process {
+        id: imageDetectionProcess
+
+        command: ["bash", "-c", `${"~/.config/caelestia/scripts"}/images/find-regions-venv.sh `
+            + `--image '${ScreenshotAction.escapeShellStr(root.screenshotPath)}' `
+            + `--max-width ${Math.round(root.screen.width * root.falsePositivePreventionRatio)} `
+            + `--max-height ${Math.round(root.screen.height * root.falsePositivePreventionRatio)} `]
+        stdout: StdioCollector {
+            id: imageDimensionCollector
+
+            onStreamFinished: {
+                imageRegions = RegionFunctions.filterImageRegions(
+                    JSON.parse(imageDimensionCollector.text),
+                    root.windowRegions
+                );
+            }
+        }
+    }
+
+    function getScreenshotAction() {
+        switch(root.action) {
+            case RegionSelection.SnipAction.Copy:
+                return ScreenshotAction.Action.Copy;
+            case RegionSelection.SnipAction.Edit:
+                return ScreenshotAction.Action.Edit;
+            case RegionSelection.SnipAction.Search:
+                return ScreenshotAction.Action.Search;
+            case RegionSelection.SnipAction.CharRecognition:
+                return ScreenshotAction.Action.CharRecognition;
+            case RegionSelection.SnipAction.Record:
+                return ScreenshotAction.Action.Record;
+            case RegionSelection.SnipAction.RecordWithSound:
+                return ScreenshotAction.Action.RecordWithSound;
+            default:
+                console.warn("[Region Selector] Unknown snip action, skipping snip.");
+                root.dismiss();
+                return;
+        }
+    }
+
     property bool screenshotConsumed: false
 
     // Execution after selection
@@ -306,20 +436,24 @@ PanelWindow {
         root.regionHeight = Math.max(0, Math.min(root.regionHeight, root.screen.height - root.regionY));
 
         // Adjust action
-        if (root.action === ScreenshotAction.SnipAction.Copy || root.action === ScreenshotAction.SnipAction.Edit) {
-            root.action = root.mouseButton === Qt.RightButton ? ScreenshotAction.SnipAction.Edit : ScreenshotAction.SnipAction.Copy;
+        if (root.action === RegionSelection.SnipAction.Copy || root.action === RegionSelection.SnipAction.Edit) {
+            root.action = root.mouseButton === Qt.RightButton ? RegionSelection.SnipAction.Edit : RegionSelection.SnipAction.Copy;
         }
 
+        const screenshotDir = "" !== "" ? //
+            "" : "";
+        var screenshotAction = root.getScreenshotAction();
         const command = ScreenshotAction.getCommand(
             root.regionX * root.monitorScale, //
             root.regionY * root.monitorScale, //
             root.regionWidth * root.monitorScale,//
             root.regionHeight * root.monitorScale, //
             root.screenshotPath, //
-            root.action
+            screenshotAction, //
+            screenshotDir
         )
         Quickshell.execDetached(command);
-        if (root.action == ScreenshotAction.SnipAction.Record || root.action == ScreenshotAction.SnipAction.RecordWithSound) {
+        if (root.action == RegionSelection.SnipAction.Record || root.action == RegionSelection.SnipAction.RecordWithSound) {
             root.phase = RegionSelection.Phase.Post
             root.selectionMode = RegionSelection.SelectionMode.RectCorners
         } else {
@@ -336,14 +470,15 @@ PanelWindow {
 
         // Determine spectacle flags based on action
         let spectacleFlags = "-b -a -n";
-        if (root.mouseButton === Qt.RightButton || root.action === ScreenshotAction.SnipAction.Edit) {
+        if (root.mouseButton === Qt.RightButton || root.action === RegionSelection.SnipAction.Edit) {
             spectacleFlags = "-b -a -n -e"; // exclude decorations on right-click (edit)
         }
 
         const tmpFile = Paths.runtimeTemp(`snip-window-${Date.now()}.png`);
-        const actionScript = ScreenshotAction.getScript(
-            0, 0, 99999, 99999, tmpFile, root.action, saveDir
+        const actionCmdArray = ScreenshotAction.getCommand(
+            0, 0, 99999, 99999, tmpFile, root.getScreenshotAction(), saveDir
         );
+        const actionScript = actionCmdArray[2];
 
         const command = [
             "bash", "-c",
@@ -522,6 +657,64 @@ PanelWindow {
             }
         }
 
+        // Layer regions
+        Repeater {
+            model: ScriptModel {
+                values: {
+                    if (root.phase === RegionSelection.Phase.Select && root.enableLayerRegions) {
+                        return root.layerRegions
+                    } else {
+                        return []
+                    }
+                }
+            }
+            delegate: TargetRegion {
+                z: targeted ? 99 : 2
+
+                required property var modelData
+                clientDimensions: modelData
+                targeted: !root.draggedAway &&
+                    (root.targetedRegionX === modelData.at[0]
+                    && root.targetedRegionY === modelData.at[1]
+                    && root.targetedRegionWidth === modelData.size[0]
+                    && root.targetedRegionHeight === modelData.size[1])
+                opacity: root.draggedAway ? 0 : (root.targetedRegionValid() && !targeted ? 0 : root.targetRegionOpacity)
+                borderColor: root.windowBorderColor
+                fillColor: targeted ? root.windowFillColor : Qt.alpha(root.windowFillColor, 0)
+                text: `${modelData.namespace}`
+                radius: 12
+            }
+        }
+
+        // Content regions
+        Repeater {
+            model: ScriptModel {
+                values: {
+                    if (root.phase === RegionSelection.Phase.Select && root.enableContentRegions) {
+                        return root.imageRegions
+                    } else {
+                        return []
+                    }
+                }
+            }
+            delegate: TargetRegion {
+                z: 4
+
+                required property var modelData
+                clientDimensions: modelData
+                targeted: !root.draggedAway &&
+                    (root.targetedRegionX === modelData.at[0]
+                    && root.targetedRegionY === modelData.at[1]
+                    && root.targetedRegionWidth === modelData.size[0]
+                    && root.targetedRegionHeight === modelData.size[1])
+
+                opacity: root.draggedAway ? 0 : root.contentRegionOpacity
+                borderColor: root.imageBorderColor
+                fillColor: targeted ? root.imageFillColor : Qt.alpha(root.imageFillColor, 0)
+                text: qsTr("Content region")
+            }
+        }
+
         // Controls
         Row {
             id: regionSelectionControls
@@ -554,17 +747,39 @@ PanelWindow {
             spacing: 6
 
             OptionsToolbar {
-                Synchronizer on action {
-                    property alias source: root.action
-                }
-                Synchronizer on selectionMode {
-                    property alias source: root.selectionMode
-                }
-                Synchronizer on showWindowOutlines {
-                    property alias source: root.showWindowOutlines
-                }
+                id: optionsToolbar
+
+                // Qt.labs.synchronizer's Synchronizer type is Qt 6.10+ tech
+                // preview and unavailable on Qt 6.8. Replicate its two-way
+                // sync with explicit imperative pushes in both directions so
+                // an assignment on either side doesn't just clear a plain
+                // declarative binding.
+                action: root.action
+                selectionMode: root.selectionMode
+                showWindowOutlines: root.showWindowOutlines
+
+                onActionChanged: if (root.action !== action) root.action = action
+                onSelectionModeChanged: if (root.selectionMode !== selectionMode) root.selectionMode = selectionMode
+                onShowWindowOutlinesChanged: if (root.showWindowOutlines !== showWindowOutlines) root.showWindowOutlines = showWindowOutlines
 
                 onDismiss: root.dismiss();
+            }
+
+            Connections {
+                target: root
+
+                function onActionChanged() {
+                    if (optionsToolbar.action !== root.action)
+                        optionsToolbar.action = root.action;
+                }
+                function onSelectionModeChanged() {
+                    if (optionsToolbar.selectionMode !== root.selectionMode)
+                        optionsToolbar.selectionMode = root.selectionMode;
+                }
+                function onShowWindowOutlinesChanged() {
+                    if (optionsToolbar.showWindowOutlines !== root.showWindowOutlines)
+                        optionsToolbar.showWindowOutlines = root.showWindowOutlines;
+                }
             }
             IconButton {
                 anchors.verticalCenter: parent.verticalCenter

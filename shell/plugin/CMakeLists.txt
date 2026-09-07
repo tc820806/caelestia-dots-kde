@@ -16,6 +16,21 @@ if(NOT DEFINED INSTALL_QSCONFDIR)
     set(INSTALL_QSCONFDIR "etc/xdg/quickshell/caelestia" CACHE STRING "Quickshell config install dir")
 endif()
 
+# Fallback package config for distros (e.g. Debian) whose Qt6 packaging
+# doesn't ship one for QtGui's private headers; see the file itself for why.
+# find_package(Qt6 COMPONENTS ...)'s own component resolution restricts each
+# component's lookup to Qt6's own install prefix, ignoring CMAKE_PREFIX_PATH
+# entirely, so a prefix-path-based fallback can't reach here -- go through a
+# plain probe first (which behaves like a normal find_package and does honor
+# CMAKE_PREFIX_PATH/system paths, so a real system-provided config, e.g. on
+# Arch or Fedora, is always preferred) and only force our shim's directory
+# into the *_DIR cache variable find_package always checks first, as a
+# fallback when that probe comes up empty.
+find_package(Qt6GuiPrivate QUIET CONFIG)
+if(NOT Qt6GuiPrivate_FOUND)
+    set(Qt6GuiPrivate_DIR "${CMAKE_CURRENT_SOURCE_DIR}/cmake/qt6-guiprivate-shim/Qt6GuiPrivate" CACHE PATH "" FORCE)
+endif()
+
 find_package(Qt6 REQUIRED COMPONENTS ShaderTools Core Qml Gui Quick QuickControls2 Concurrent Sql Network DBus WaylandClient)
 find_package(KF6WindowSystem REQUIRED)
 find_package(KF6GuiAddons REQUIRED)
@@ -47,7 +62,7 @@ endif()
 include(cmake/sensorslib.cmake)
 
 set(QT_QML_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/qml")
-qt_standard_project_setup(REQUIRES 6.9)
+qt_standard_project_setup(REQUIRES 6.8)
 
 include(cmake/pch.cmake)
 include(cmake/qml-module.cmake)

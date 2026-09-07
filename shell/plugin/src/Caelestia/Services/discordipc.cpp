@@ -6,6 +6,7 @@
 #include <QDataStream>
 #include <QCoreApplication>
 #include <QDateTime>
+#include <QJsonDocument>
 
 namespace caelestia {
 

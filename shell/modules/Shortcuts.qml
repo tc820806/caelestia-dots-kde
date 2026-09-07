@@ -6,7 +6,6 @@ import Caelestia.Config
 import Caelestia.Services
 import qs.components.misc
 import qs.services
-import qs.utils
 import qs.modules.nexus
 import qs.modules.launcher.services
 
@@ -57,14 +56,14 @@ Scope {
         onPressed: {
             const visibilities = Visibilities.getForActive();
             if (visibilities.overview) {
-                Visibilities.setOverview(false);
+                visibilities.overview = false;
             } else {
                 if (typeof KWinActiveWindowBridge !== "undefined" && KWinActiveWindowBridge.activeWindow && KWinActiveWindowBridge.activeWindow.address) {
                     Visibilities.preOverviewActiveWindowAddress = KWinActiveWindowBridge.activeWindow.address;
                 } else {
                     Visibilities.preOverviewActiveWindowAddress = "";
                 }
-                Visibilities.setOverview(true);
+                visibilities.overview = true;
             }
         }
     }
@@ -113,7 +112,7 @@ Scope {
         }
     }
     // qmllint disable unresolved-type
-    // Using Caelestia lockscreen greeter
+    // USING plasma-wallpaper-application plugin for now
     // CustomShortcut {
     //     // qmllint enable unresolved-type
     //     name: "lock"
@@ -276,27 +275,27 @@ Scope {
     CustomShortcut {
         name: "foot"
         description: "Launch Terminal"
-        onPressed: Launch.exec(["foot"])
+        onPressed: Quickshell.execDetached(["kstart", "--", "kitty"])
     }
     CustomShortcut {
         name: "firefox"
         description: "Launch Browser"
-        onPressed: Launch.exec(["firefox"])
+        onPressed: Quickshell.execDetached(["kstart", "--", "firefox"])
     }
     CustomShortcut {
         name: "code"
         description: "Launch Editor"
-        onPressed: Launch.exec(["code"])
+        onPressed: Quickshell.execDetached(["kstart", "--", "code"])
     }
     CustomShortcut {
         name: "github-desktop"
         description: "Launch GitHub Desktop"
-        onPressed: Launch.exec(["github-desktop"])
+        onPressed: Quickshell.execDetached(["kstart", "--", "github-desktop"])
     }
     CustomShortcut {
         name: "nemo"
         description: "Launch File Manager"
-        onPressed: Launch.exec(["nemo"])
+        onPressed: Quickshell.execDetached(["kstart", "--", "dolphin"])
     }
     CustomShortcut {
         name: "kcolorpicker"
@@ -379,11 +378,7 @@ Scope {
                 if (root.hasFullscreen && ["launcher", "session", "dashboard"].includes(drawer))
                     return;
                 const visibilities = Visibilities.getForActive();
-                // The overview spans every screen; see Visibilities.setOverview.
-                if (drawer === "overview")
-                    Visibilities.setOverview(!visibilities.overview);
-                else
-                    visibilities[drawer] = !visibilities[drawer];
+                visibilities[drawer] = !visibilities[drawer];
             } else {
                 console.warn(lc, `Drawer "${drawer}" does not exist`);
             }
@@ -399,10 +394,7 @@ Scope {
                     return;
                 }
                 const visibilities = Visibilities.getForActive();
-                if (drawer === "overview")
-                    Visibilities.setOverview(!visibilities.overview);
-                else
-                    visibilities[drawer] = !visibilities[drawer];
+                visibilities[drawer] = !visibilities[drawer];
             } else {
                 console.warn(lc, `Drawer "${drawer}" does not exist`);
             }
