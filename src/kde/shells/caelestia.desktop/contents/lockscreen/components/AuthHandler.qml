@@ -30,7 +30,15 @@ Item {
 
     property int fprintTries: 0
     property int maxFprintTries: 3
-    property int timeoutInterval: 15000
+    // A flat 15s deadline from keypress to completion misfired as a false
+    // "Authentication timed out" whenever the backend (PAM/D-Bus round trip
+    // through org.kde.kscreenlocker's Authenticator) was merely slow rather
+    // than actually stuck - e.g. right after resuming from suspend, when
+    // logind/D-Bus is briefly congested by every service reconnecting at
+    // once. 30s gives real-but-slow auth room to finish; the timer is also
+    // restarted on every busyChanged-to-true below so a still-working
+    // backend keeps extending its own deadline instead of racing a stale one.
+    property int timeoutInterval: 30000
     property int notificationDismissInterval: 5000
     property int graceLockInterval: 3000
 
@@ -314,11 +322,19 @@ Item {
         }
 
         function onBusyChanged() {
-            if (activeAuthenticator && typeof activeAuthenticator.busy !== "undefined" && !activeAuthenticator.busy) {
+            if (!activeAuthenticator || typeof activeAuthenticator.busy === "undefined")
+                return;
+
+            if (!activeAuthenticator.busy) {
                 if (root.isAuthenticating && !root.graceLocked && !graceLockTimer.running) {
                     root.isAuthenticating = false;
                     authTimeoutTimer.stop();
                 }
+            } else if (root.isAuthenticating) {
+                // Backend started a (new) round of work - give it a fresh
+                // deadline instead of judging it against however much time
+                // was already left on the timer from the previous step.
+                authTimeoutTimer.restart();
             }
         }
 
