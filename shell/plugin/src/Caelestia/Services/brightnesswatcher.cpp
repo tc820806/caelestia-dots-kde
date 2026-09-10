@@ -4,6 +4,9 @@
 #include <qloggingcategory.h>
 #include <QGuiApplication>
 #include <qpa/qplatformnativeinterface.h>
+#include <wayland-client.h>
+
+#include "wayland-kde-output-device-v2-client-protocol.h"
 
 Q_LOGGING_CATEGORY(lcBrightnessWatcher, "caelestia.services.brightnesswatcher", QtInfoMsg)
 
@@ -63,9 +66,50 @@ BrightnessWatcher::BrightnessWatcher(QObject* parent)
     connect(m_registry, &KdeOutputDeviceRegistry::deviceAdded, this, &BrightnessWatcher::onDeviceAdded);
     
     m_management = new KdeOutputManagement(this);
-    
+
     // QtWayland requires us to explicitly check if the extension was successfully bound.
     // However, it binds asynchronously. If QGuiApplication is already running, it binds immediately.
+
+    setupLegacyOutputDeviceDiscovery();
+}
+
+void BrightnessWatcher::handleRegistryGlobal(void* data, struct wl_registry* registry, uint32_t name,
+                                              const char* interface, uint32_t version) {
+    if (qstrcmp(interface, "kde_output_device_v2") != 0)
+        return;
+
+    auto* self = static_cast<BrightnessWatcher*>(data);
+    uint32_t bindVersion = qMin<uint32_t>(version, static_cast<uint32_t>(kde_output_device_v2_interface.version));
+    auto* object = static_cast<struct ::kde_output_device_v2*>(
+        wl_registry_bind(registry, name, &kde_output_device_v2_interface, bindVersion));
+
+    auto* dev = new KdeOutputDevice(object);
+    self->onDeviceAdded(dev);
+}
+
+void BrightnessWatcher::handleRegistryGlobalRemove(void*, struct wl_registry*, uint32_t) {
+    // Each output announces its own removal via kde_output_device_v2's "removed"
+    // event (KdeOutputDevice::kde_output_device_v2_removed), which onDeviceAdded()
+    // already wires up regardless of how the device was discovered. Nothing to do here.
+}
+
+void BrightnessWatcher::setupLegacyOutputDeviceDiscovery() {
+    auto* native = qApp->platformNativeInterface();
+    auto* display = native ? static_cast<struct wl_display*>(
+                                  native->nativeResourceForIntegration(QByteArrayLiteral("wl_display")))
+                            : nullptr;
+    if (!display) {
+        qCWarning(lcBrightnessWatcher) << "No wl_display available; cannot discover legacy kde_output_device_v2 outputs";
+        return;
+    }
+
+    static const struct wl_registry_listener listener = {
+        &BrightnessWatcher::handleRegistryGlobal,
+        &BrightnessWatcher::handleRegistryGlobalRemove,
+    };
+
+    m_wlRegistry = wl_display_get_registry(display);
+    wl_registry_add_listener(m_wlRegistry, &listener, this);
 }
 
 qreal BrightnessWatcher::brightness(const QString& outputName) const {

@@ -212,7 +212,7 @@ if [[ "${CAELESTIA_SETUP_RUNNING:-0}" == "0" ]]; then
             caelestia_sudo dnf install -y "${MISSING[@]}" || warn "dnf install failed..."
         fi
     elif command -v apt-get >/dev/null; then
-        mapfile -t MISSING < <(missing_packages qt6-wayland qt6-wayland-dev libkf6globalaccel-dev libkf6windowsystem-dev qt6-base-private-dev libkf6kpipewire-dev ksshaskpass)
+        mapfile -t MISSING < <(missing_packages qt6-wayland qt6-wayland-dev libkf6globalaccel-dev libkf6windowsystem-dev qt6-base-private-dev libkpipewire-dev kwin-dev ksshaskpass)
         if [[ ${#MISSING[@]} -gt 0 ]]; then
             info "Installing via apt: ${MISSING[*]}"
             caelestia_sudo apt-get update && caelestia_sudo apt-get install -y "${MISSING[@]}" || warn "apt install failed..."

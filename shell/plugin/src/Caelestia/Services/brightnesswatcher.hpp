@@ -10,6 +10,8 @@
 #include "qwayland-kde-output-device-v2.h"
 #include "qwayland-kde-output-management-v2.h"
 
+struct wl_registry;
+
 namespace caelestia::services {
 
 class KdeOutputDevice : public QObject, public QtWayland::kde_output_device_v2 {
@@ -76,9 +78,20 @@ private slots:
     void onDeviceAdded(KdeOutputDevice* device);
 
 private:
+    // Fallback for KWin releases (e.g. 6.3.x) that predate the
+    // kde_output_device_registry_v2 global: they advertise kde_output_device_v2
+    // directly, one instance per output, so KdeOutputDeviceRegistry above never
+    // activates (its own global doesn't exist) and m_devices stays empty. This
+    // scans the raw registry for that legacy form and binds it manually.
+    void setupLegacyOutputDeviceDiscovery();
+    static void handleRegistryGlobal(void* data, struct wl_registry* registry, uint32_t name,
+                                      const char* interface, uint32_t version);
+    static void handleRegistryGlobalRemove(void* data, struct wl_registry* registry, uint32_t name);
+
     KdeOutputDeviceRegistry* m_registry = nullptr;
     KdeOutputManagement* m_management = nullptr;
     QHash<QString, KdeOutputDevice*> m_devices;
+    struct wl_registry* m_wlRegistry = nullptr;
 };
 
 } // namespace caelestia::services
