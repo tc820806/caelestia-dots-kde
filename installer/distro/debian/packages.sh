@@ -446,6 +446,55 @@ if ! command -v caelestia >/dev/null 2>&1; then
     rm -rf "$tmpdir"
 fi
 
+# caelestia-dots/cli v1.0.8's material/generator.py defines a Protocol class
+# using DynamicScheme in a method's return-type annotation *before* the
+# try/except that actually imports DynamicScheme -- Python evaluates return
+# annotations at class-definition time (no `from __future__ import
+# annotations` in this file), so every "select dynamic" click fails with
+# NameError: name 'DynamicScheme' is not defined. Not Debian-specific -- a
+# straight ordering bug that would hit any OS running this pinned release --
+# but nothing upstream ever reorders it for us, so patch it here after every
+# install. Position-based (not exact-text) so wording/comment drift in a
+# future CLI release doesn't matter -- only the actual ordering does; if
+# neither anchor is found at all, the file is left alone rather than guessed at.
+if python3 -c "import caelestia.utils.material.generator" >/dev/null 2>&1; then
+    log "Checking caelestia-cli's DynamicScheme import ordering..."
+    python3 - <<'PYEOF' || true
+import re
+import subprocess
+
+import caelestia.utils.material.generator as m
+
+path = m.__file__
+with open(path) as f:
+    src = f.read()
+
+class_pat = r"(?:# .*\n)*class SchemeConstructor\(Protocol\):\n.*\.\.\..*\n"
+class_match = re.search(class_pat, src)
+import_match = re.search(
+    r"try:\n    from materialyoucolor\.dynamiccolor\.dynamic_scheme import DynamicScheme\n"
+    r"except ImportError:\n    from materialyoucolor\.scheme\.dynamic_scheme import DynamicScheme\n",
+    src,
+)
+
+if not class_match or not import_match:
+    print("generator.py doesn't match the expected shape; leaving it alone.")
+elif import_match.start() < class_match.start():
+    print("Already in the correct order.")
+else:
+    # Move the import block to just before the class: remove it from its
+    # original (later) position, then re-find the class in what's left and
+    # insert the import just above it.
+    import_block = import_match.group(0)
+    without_import = src[:import_match.start()] + src[import_match.end():]
+    class_match2 = re.search(class_pat, without_import)
+    patched = without_import[:class_match2.start()] + import_block + "\n" + without_import[class_match2.start():]
+
+    subprocess.run(["sudo", "-A", "tee", path], input=patched.encode(), stdout=subprocess.DEVNULL, check=True)
+    print("Patched: moved the DynamicScheme import above the class that uses it in an annotation.")
+PYEOF
+fi
+
 if command -v sassc >/dev/null 2>&1 && ! command -v sass >/dev/null 2>&1; then
     sudo ln -sf /usr/bin/sassc /usr/local/bin/sass || true
 fi
