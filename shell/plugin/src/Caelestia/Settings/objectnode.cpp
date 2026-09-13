@@ -1,6 +1,7 @@
 #include "objectnode.hpp"
 
 #include <qjsonobject.h>
+#include <qvariant.h>
 
 #include "codecs.hpp"
 

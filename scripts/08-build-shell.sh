@@ -219,7 +219,7 @@ if [[ "${CAELESTIA_SETUP_RUNNING:-0}" == "0" ]]; then
             caelestia_sudo dnf install -y "${MISSING[@]}" || warn "dnf install failed..."
         fi
     elif command -v apt-get >/dev/null; then
-        mapfile -t MISSING < <(missing_packages qt6-wayland qt6-wayland-dev libkf6globalaccel-dev libkf6windowsystem-dev qt6-base-private-dev libkf6kpipewire-dev ksshaskpass)
+        mapfile -t MISSING < <(missing_packages qt6-wayland qt6-wayland-dev libkf6globalaccel-dev libkf6windowsystem-dev qt6-base-private-dev libkpipewire-dev kwin-dev ksshaskpass)
         if [[ ${#MISSING[@]} -gt 0 ]]; then
             info "Installing via apt: ${MISSING[*]}"
             caelestia_sudo apt-get update && caelestia_sudo apt-get install -y "${MISSING[@]}" || warn "apt install failed..."
@@ -560,7 +560,7 @@ if grep -q "QML2_IMPORT_PATH" ~/.bashrc; then
         sed -i '/QML2_IMPORT_PATH/ s|\(.*[^"]\)\("*\)$|\1:$HOME/.config/quickshell/caelestia\2|' ~/.bashrc
     fi
 else
-    echo 'export QML2_IMPORT_PATH="$HOME/.local/lib/qt6/qml:$HOME/.config/quickshell/caelestia"' >> ~/.bashrc
+    echo 'export QML2_IMPORT_PATH="$HOME/.local/lib/qt6/qml:$HOME/.config/quickshell/caelestia:$(qtpaths6 --query QT_INSTALL_QML)"' >> ~/.bashrc
 fi
 
 if ! grep -q "CAELESTIA_LIB_DIR" ~/.bashrc; then
@@ -573,13 +573,29 @@ if [ -f "$HOME/.config/fish/config.fish" ]; then
             sed -i '/QML2_IMPORT_PATH/ s|\(.*[^"]\)\("*\)$|\1:$HOME/.config/quickshell/caelestia\2|' ~/.config/fish/config.fish
         fi
     else
-        echo 'set -gx QML2_IMPORT_PATH "$HOME/.local/lib/qt6/qml:$HOME/.config/quickshell/caelestia"' >> ~/.config/fish/config.fish
+        echo 'set -gx QML2_IMPORT_PATH "$HOME/.local/lib/qt6/qml:$HOME/.config/quickshell/caelestia:(qtpaths6 --query QT_INSTALL_QML)"' >> ~/.config/fish/config.fish
     fi
 
     if ! grep -q "CAELESTIA_LIB_DIR" ~/.config/fish/config.fish; then
         echo 'set -gx CAELESTIA_LIB_DIR "$HOME/.local/lib/caelestia"' >> ~/.config/fish/config.fish
     fi
 fi
+
+# .bashrc/config.fish only reach interactive shells. kscreenlocker_greet (KDE's
+# lock-screen greeter) is spawned by KWin/ksld as part of session
+# infrastructure, never through a login shell, so those exports never reach
+# it: it can't find the Caelestia.*/M3Shapes QML modules, fails to load the
+# custom lock screen, and silently falls back to KDE's built-in locker.
+# Plasma sources every *.sh under plasma-workspace/env/ into the whole
+# graphical session at login, which is the one place that actually
+# propagates to it.
+mkdir -p ~/.config/plasma-workspace/env
+cat > ~/.config/plasma-workspace/env/caelestia-qml-path.sh << 'ENVEOF'
+#!/bin/sh
+export QML2_IMPORT_PATH="$HOME/.local/lib/qt6/qml:$HOME/.config/quickshell/caelestia:$(qtpaths6 --query QT_INSTALL_QML)"
+export CAELESTIA_LIB_DIR="$HOME/.local/lib/caelestia"
+ENVEOF
+chmod +x ~/.config/plasma-workspace/env/caelestia-qml-path.sh
 
 mkdir -p ~/.local/bin ~/.config/systemd/user
 

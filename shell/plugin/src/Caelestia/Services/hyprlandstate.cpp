@@ -2,6 +2,7 @@
 #include "plasmawindows.hpp"
 
 #include <qdir.h>
+#include <qjsondocument.h>
 #include <qlocalsocket.h>
 #include <qloggingcategory.h>
 

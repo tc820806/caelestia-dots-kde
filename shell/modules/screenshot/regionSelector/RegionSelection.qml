@@ -553,21 +553,39 @@ PanelWindow {
             spacing: 6
 
             OptionsToolbar {
+                id: optionsToolbar
+
                 // Qt.labs.synchronizer's Synchronizer type is Qt 6.10+ tech
-                // preview and unavailable on Qt 6.8. This reproduces the same
-                // two-way sync manually: the bindings below seed this
-                // instance from root, and the onXChanged handlers write user
-                // interaction (root.action = newAction etc. inside
-                // OptionsToolbar.qml) back out to root.
+                // preview and unavailable on Qt 6.8. Replicate its two-way
+                // sync with explicit imperative pushes in both directions so
+                // an assignment on either side doesn't just clear a plain
+                // declarative binding.
                 action: root.action
                 selectionMode: root.selectionMode
                 showWindowOutlines: root.showWindowOutlines
 
-                onActionChanged: root.action = action
-                onSelectionModeChanged: root.selectionMode = selectionMode
-                onShowWindowOutlinesChanged: root.showWindowOutlines = showWindowOutlines
+                onActionChanged: if (root.action !== action) root.action = action
+                onSelectionModeChanged: if (root.selectionMode !== selectionMode) root.selectionMode = selectionMode
+                onShowWindowOutlinesChanged: if (root.showWindowOutlines !== showWindowOutlines) root.showWindowOutlines = showWindowOutlines
 
                 onDismiss: root.dismiss();
+            }
+
+            Connections {
+                target: root
+
+                function onActionChanged() {
+                    if (optionsToolbar.action !== root.action)
+                        optionsToolbar.action = root.action;
+                }
+                function onSelectionModeChanged() {
+                    if (optionsToolbar.selectionMode !== root.selectionMode)
+                        optionsToolbar.selectionMode = root.selectionMode;
+                }
+                function onShowWindowOutlinesChanged() {
+                    if (optionsToolbar.showWindowOutlines !== root.showWindowOutlines)
+                        optionsToolbar.showWindowOutlines = root.showWindowOutlines;
+                }
             }
             IconButton {
                 anchors.verticalCenter: parent.verticalCenter

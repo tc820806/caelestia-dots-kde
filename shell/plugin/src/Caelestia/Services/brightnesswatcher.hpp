@@ -10,6 +10,8 @@
 #include "qwayland-kde-output-device-v2.h"
 #include "qwayland-kde-output-management-v2.h"
 
+struct wl_registry;
+
 namespace caelestia::services {
 
 class KdeOutputDevice : public QObject, public QtWayland::kde_output_device_v2 {

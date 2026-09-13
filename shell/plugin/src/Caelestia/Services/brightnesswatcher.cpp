@@ -3,7 +3,6 @@
 
 #include <qloggingcategory.h>
 #include <QGuiApplication>
-#include <qpa/qplatformnativeinterface.h>
 #include <QtGui/qguiapplication_platform.h>
 #include <wayland-client.h>
 #include "wayland-kde-output-device-v2-client-protocol.h"
@@ -140,7 +139,7 @@ BrightnessWatcher::BrightnessWatcher(QObject* parent)
     connect(m_legacyScanner, &KdeOutputDeviceLegacyScanner::deviceAdded, this, &BrightnessWatcher::onDeviceAdded);
 
     m_management = new KdeOutputManagement(this);
-    
+
     // QtWayland requires us to explicitly check if the extension was successfully bound.
     // However, it binds asynchronously. If QGuiApplication is already running, it binds immediately.
 }
