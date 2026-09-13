@@ -592,7 +592,7 @@ fi
 mkdir -p ~/.config/plasma-workspace/env
 cat > ~/.config/plasma-workspace/env/caelestia-qml-path.sh << 'ENVEOF'
 #!/bin/sh
-export QML2_IMPORT_PATH="$HOME/.local/lib/qt6/qml:$HOME/.config/quickshell/caelestia:$(qtpaths6 --query QT_INSTALL_QML)${QML2_IMPORT_PATH:+:$QML2_IMPORT_PATH}"
+export QML2_IMPORT_PATH="$HOME/.local/lib/qt6/qml:$HOME/.config/quickshell/caelestia:$(qtpaths6 --query QT_INSTALL_QML)"
 export CAELESTIA_LIB_DIR="$HOME/.local/lib/caelestia"
 ENVEOF
 chmod +x ~/.config/plasma-workspace/env/caelestia-qml-path.sh
