@@ -104,6 +104,27 @@ X-KDE-Wayland-Interfaces=zkde_screencast_unstable_v1
 EOF
 ok "Quickshell autostart created."
 
+# systemd-xdg-autostart-generator turns the .desktop entry above into
+# app-caelestiashell@autostart.service fresh every session, and defaults it
+# to Restart=no. On distros still shipping Qt 6.8 (e.g. Debian trixie), this
+# build hits a known intermittent QML-engine JIT bug
+# (QQmlPropertyCache::createMetaObject / QQmlInterceptorMetaObject::
+# toDynamicMetaObject SIGSEGV) that QV4_FORCE_INTERPRETER=1 above reduces but
+# does not eliminate. Without an explicit restart policy, a crash here just
+# leaves the desktop with no shell until the next login -- so override it to
+# actually come back on its own.
+SYSTEMD_USER_DIR="$HOME/.config/systemd/user/app-caelestiashell@autostart.service.d"
+mkdir -p "$SYSTEMD_USER_DIR"
+cat > "$SYSTEMD_USER_DIR/override.conf" << 'EOF'
+[Service]
+Restart=on-failure
+RestartSec=2
+EOF
+if command -v systemctl >/dev/null 2>&1; then
+    systemctl --user daemon-reload 2>/dev/null || true
+fi
+ok "Autostart crash-recovery override installed."
+
 # KWin restricts privileged Wayland protocols (like zkde_screencast_unstable_v1,
 # used for live window thumbnails). For every such protocol, KWin's
 # allowInterface() calls KWin::fetchRequestedInterfaces(client->executablePath()),
