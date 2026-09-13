@@ -117,6 +117,16 @@ SYSTEMD_USER_DIR="$HOME/.config/systemd/user/app-caelestiashell@autostart.servic
 mkdir -p "$SYSTEMD_USER_DIR"
 cat > "$SYSTEMD_USER_DIR/override.conf" << 'EOF'
 [Service]
+# The generated unit defaults to ExitType=cgroup, which only evaluates
+# Restart= once every process in the cgroup has exited. This unit's cgroup
+# also holds long-lived detached helpers (a dbus-monitor watching keyboard
+# layout signals, a polling loop for kde-material-you-colors) that outlive
+# the actual quickshell process -- confirmed live: quickshell SEGV'd, those
+# two stayed alive, and Restart=on-failure below never fired because the
+# cgroup never emptied. ExitType=main makes systemd track the exec'd main
+# process itself, so a quickshell crash is seen and restarted regardless of
+# what its background helpers are doing.
+ExitType=main
 Restart=on-failure
 RestartSec=2
 EOF
