@@ -52,6 +52,32 @@ protected:
     void kde_output_device_registry_v2_output(struct ::kde_output_device_v2* output) override;
 };
 
+// kde_output_device_registry_v2 (the class above) is itself a KWin protocol
+// addition (protocol v24) that wraps each output as an "output" event on one
+// shared object. KWin versions before that advertise every kde_output_device_v2
+// directly as its own top-level wl_registry global instead -- there is no
+// registry object to bind at all, so KdeOutputDeviceRegistry above silently
+// never activates on those compositors (confirmed live via WAYLAND_DEBUG=1:
+// KWin 6.3.6 advertises kde_output_device_v2 as a bare global, and never
+// advertises kde_output_device_registry_v2 among its ~59 other globals).
+// This scans wl_registry directly for kde_output_device_v2 globals and binds
+// each one itself, so device discovery works either way.
+class KdeOutputDeviceLegacyScanner : public QObject {
+    Q_OBJECT
+public:
+    explicit KdeOutputDeviceLegacyScanner(QObject* parent = nullptr);
+    ~KdeOutputDeviceLegacyScanner() override;
+
+signals:
+    void deviceAdded(KdeOutputDevice* device);
+
+private:
+    static void handleGlobal(void* data, struct wl_registry* registry, uint32_t name, const char* interface, uint32_t version);
+    static void handleGlobalRemove(void* data, struct wl_registry* registry, uint32_t name);
+
+    struct wl_registry* m_registry = nullptr;
+};
+
 class KdeOutputManagement : public QWaylandClientExtensionTemplate<KdeOutputManagement>,
                             public QtWayland::kde_output_management_v2 {
     Q_OBJECT
@@ -77,6 +103,7 @@ private slots:
 
 private:
     KdeOutputDeviceRegistry* m_registry = nullptr;
+    KdeOutputDeviceLegacyScanner* m_legacyScanner = nullptr;
     KdeOutputManagement* m_management = nullptr;
     QHash<QString, KdeOutputDevice*> m_devices;
 };

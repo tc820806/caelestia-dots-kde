@@ -4,6 +4,9 @@
 #include <qloggingcategory.h>
 #include <QGuiApplication>
 #include <qpa/qplatformnativeinterface.h>
+#include <QtGui/qguiapplication_platform.h>
+#include <wayland-client.h>
+#include "wayland-kde-output-device-v2-client-protocol.h"
 
 Q_LOGGING_CATEGORY(lcBrightnessWatcher, "caelestia.services.brightnesswatcher", QtInfoMsg)
 
@@ -43,7 +46,20 @@ void KdeOutputDevice::kde_output_device_v2_removed() {
 
 
 KdeOutputDeviceRegistry::KdeOutputDeviceRegistry(QObject* parent)
-    : QWaylandClientExtensionTemplate<KdeOutputDeviceRegistry>(23) {
+    // QWaylandClientExtensionTemplate only binds if the compositor advertises
+    // an interface version >= the one requested here; it does not fall back
+    // to min(requested, advertised). Upstream requests 23 (they track KWin
+    // git master, which is well ahead), but everything this class actually
+    // uses -- capability_brightness and the brightness event -- only needs
+    // protocol version 9. KWin 6.3.x (this build's target) advertises 11, so
+    // requesting 23 here silently never binds: BrightnessWatcher stays
+    // permanently inactive, brightness() always returns -1, and setBrightness()
+    // is a no-op that never reaches the compositor -- confirmed live via
+    // /sys/class/backlight/*/brightness not moving after a set. 9 is the
+    // actual floor; keeping it low (rather than matching this system's 11
+    // exactly) keeps this working on any KWin from the point brightness
+    // control shipped, not just this one's exact version.
+    : QWaylandClientExtensionTemplate<KdeOutputDeviceRegistry>(9) {
 }
 
 void KdeOutputDeviceRegistry::kde_output_device_registry_v2_output(struct ::kde_output_device_v2* output) {
@@ -52,8 +68,61 @@ void KdeOutputDeviceRegistry::kde_output_device_registry_v2_output(struct ::kde_
 }
 
 
+KdeOutputDeviceLegacyScanner::KdeOutputDeviceLegacyScanner(QObject* parent)
+    : QObject(parent) {
+    auto* waylandApp = qGuiApp ? qGuiApp->nativeInterface<QNativeInterface::QWaylandApplication>() : nullptr;
+    if (!waylandApp) {
+        // Not running under wayland-client at all (e.g. X11) -- nothing to scan.
+        return;
+    }
+
+    struct wl_display* display = waylandApp->display();
+    if (!display) {
+        return;
+    }
+
+    m_registry = wl_display_get_registry(display);
+    static const struct wl_registry_listener listener = {
+        &KdeOutputDeviceLegacyScanner::handleGlobal,
+        &KdeOutputDeviceLegacyScanner::handleGlobalRemove,
+    };
+    wl_registry_add_listener(m_registry, &listener, this);
+}
+
+KdeOutputDeviceLegacyScanner::~KdeOutputDeviceLegacyScanner() {
+    if (m_registry) {
+        wl_registry_destroy(m_registry);
+    }
+}
+
+void KdeOutputDeviceLegacyScanner::handleGlobal(
+    void* data, struct wl_registry* registry, uint32_t name, const char* interface, uint32_t version) {
+    if (qstrcmp(interface, "kde_output_device_v2") != 0) {
+        return;
+    }
+
+    auto* self = static_cast<KdeOutputDeviceLegacyScanner*>(data);
+    // Bind at the same version floor as KdeOutputDeviceRegistry (see its
+    // constructor's comment) capped at what this particular global actually
+    // advertises, exactly like Qt's own QWaylandClientExtensionTemplate would.
+    const uint32_t bindVersion = qMin<uint32_t>(version, 9);
+    auto* bound = wl_registry_bind(registry, name, &kde_output_device_v2_interface, bindVersion);
+    auto* dev = new KdeOutputDevice(static_cast<struct ::kde_output_device_v2*>(bound));
+    emit self->deviceAdded(dev);
+}
+
+void KdeOutputDeviceLegacyScanner::handleGlobalRemove(void*, struct wl_registry*, uint32_t) {
+    // Already-bound devices learn of their own removal through the
+    // interface-specific kde_output_device_v2.removed event (handled in
+    // KdeOutputDevice::kde_output_device_v2_removed), not through the
+    // registry's global_remove -- nothing to do here.
+}
+
+
 KdeOutputManagement::KdeOutputManagement(QObject* parent)
-    : QWaylandClientExtensionTemplate<KdeOutputManagement>(21) {
+    // Same version-floor reasoning as KdeOutputDeviceRegistry above: 9 is the
+    // minimum that has set_brightness (upstream requests 21).
+    : QWaylandClientExtensionTemplate<KdeOutputManagement>(9) {
 }
 
 
@@ -61,7 +130,15 @@ BrightnessWatcher::BrightnessWatcher(QObject* parent)
     : QObject(parent) {
     m_registry = new KdeOutputDeviceRegistry(this);
     connect(m_registry, &KdeOutputDeviceRegistry::deviceAdded, this, &BrightnessWatcher::onDeviceAdded);
-    
+
+    // Covers KWin versions before kde_output_device_registry_v2 existed --
+    // see KdeOutputDeviceLegacyScanner's class comment. Harmless if the
+    // modern registry above also ends up firing for the same output on some
+    // future compositor: onDeviceAdded just keys m_devices by name, so the
+    // later of the two simply replaces the same map entry.
+    m_legacyScanner = new KdeOutputDeviceLegacyScanner(this);
+    connect(m_legacyScanner, &KdeOutputDeviceLegacyScanner::deviceAdded, this, &BrightnessWatcher::onDeviceAdded);
+
     m_management = new KdeOutputManagement(this);
     
     // QtWayland requires us to explicitly check if the extension was successfully bound.
