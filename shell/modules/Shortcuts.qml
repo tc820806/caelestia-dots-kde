@@ -294,9 +294,10 @@ Scope {
         }
     }
     CustomShortcut {
-        name: "foot"
+        name: "kitty"
+        key: "Meta+Return"
         description: qsTr("Launch Terminal")
-        onPressed: Launch.exec(["foot"])
+        onPressed: Launch.exec(["kitty"])
     }
     CustomShortcut {
         name: "firefox"
@@ -314,9 +315,10 @@ Scope {
         onPressed: Launch.exec(["github-desktop"])
     }
     CustomShortcut {
-        name: "nemo"
+        name: "dolphin"
+        key: "Meta+Alt+E"
         description: qsTr("Launch File Manager")
-        onPressed: Launch.exec(["nemo"])
+        onPressed: Launch.exec(["dolphin"])
     }
     CustomShortcut {
         name: "kcolorpicker"
