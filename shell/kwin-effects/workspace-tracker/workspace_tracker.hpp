@@ -4,7 +4,6 @@
 #include <effect/effecthandler.h>
 #include <QLocalSocket>
 #include <QUuid>
-#include <QPointer>
 #include <QObject>
 #include <QPointF>
 #include <kwin/virtualdesktops.h>
@@ -63,20 +62,24 @@ public Q_SLOTS:
     void SendToOutput(const QString& uuid, const QString& output);
 
 private Q_SLOTS:
-    void onDesktopChanging(KWin::VirtualDesktop* desktop, QPointF offset, KWin::EffectWindow* with, KWin::LogicalOutput* output);
+    // This KWin (6.3.x, no PerOutputVirtualDesktops) reports desktopChanging/
+    // desktopChanged without an output argument at all -- there's only one
+    // global current desktop. That's exactly the "no output" case already
+    // handled below: sendPayload() with a null output means "whichever
+    // screen is active," which the shell already applies to every screen.
+    void onDesktopChanging(KWin::VirtualDesktop* desktop, QPointF offset, KWin::EffectWindow* with);
     void onDesktopChangingCancelled();
-    void onDesktopChanged(KWin::VirtualDesktop* oldDesktop, KWin::VirtualDesktop* newDesktop, KWin::EffectWindow* with, KWin::LogicalOutput* output);
+    void onDesktopChanged(KWin::VirtualDesktop* oldDesktop, KWin::VirtualDesktop* newDesktop, KWin::EffectWindow* with);
     void connectSocket();
 
 private:
-    void sendPayload(int desktop, float x, float y, KWin::LogicalOutput* output);
-    /// Reports every output's current desktop, so a shell that just connected
-    /// starts from the truth instead of waiting for someone to switch.
+    void sendPayload(int desktop, float x, float y, KWin::Output* output);
+    /// Reports the current desktop, so a shell that just connected starts
+    /// from the truth instead of waiting for someone to switch.
     void sendFullState();
-    static KWin::LogicalOutput* findOutput(const QString& name);
+    static KWin::Output* findOutput(const QString& name);
 
     QLocalSocket* m_socket;
-    QPointer<KWin::LogicalOutput> m_lastChangingOutput;
 };
 
 } // namespace caelestia

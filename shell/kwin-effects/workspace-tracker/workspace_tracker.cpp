@@ -50,10 +50,10 @@ WorkspaceTrackerEffect::WorkspaceTrackerEffect()
     }
 }
 
-KWin::LogicalOutput* WorkspaceTrackerEffect::findOutput(const QString& name)
+KWin::Output* WorkspaceTrackerEffect::findOutput(const QString& name)
 {
     const auto outputs = KWin::effects->screens();
-    for (KWin::LogicalOutput* candidate : outputs) {
+    for (KWin::Output* candidate : outputs) {
         if (candidate && candidate->name() == name) {
             return candidate;
         }
@@ -63,7 +63,7 @@ KWin::LogicalOutput* WorkspaceTrackerEffect::findOutput(const QString& name)
 
 void WorkspaceTrackerEffect::SendToOutput(const QString& uuid, const QString& output)
 {
-    KWin::LogicalOutput* target = findOutput(output);
+    KWin::Output* target = findOutput(output);
     if (!target) {
         return;
     }
@@ -88,15 +88,18 @@ void WorkspaceTrackerEffect::SetDesktop(const QString& output, int desktop)
         return;
     }
 
-    KWin::LogicalOutput* target = findOutput(output);
-    if (!target) {
+    // This KWin has one global current desktop, not one per output --
+    // setCurrentDesktop() takes no output argument here. Still validate the
+    // named output exists (keeps the D-Bus call's contract honest for
+    // callers), but the switch itself necessarily applies to every screen.
+    if (!findOutput(output)) {
         return;
     }
 
     const auto desktops = KWin::effects->desktops();
     for (KWin::VirtualDesktop* candidate : desktops) {
         if (candidate && static_cast<int>(candidate->x11DesktopNumber()) == desktop) {
-            KWin::effects->setCurrentDesktop(candidate, target);
+            KWin::effects->setCurrentDesktop(candidate);
             return;
         }
     }
@@ -118,7 +121,7 @@ void WorkspaceTrackerEffect::connectSocket()
     }
 }
 
-void WorkspaceTrackerEffect::sendPayload(int desktop, float x, float y, KWin::LogicalOutput* output)
+void WorkspaceTrackerEffect::sendPayload(int desktop, float x, float y, KWin::Output* output)
 {
     if (m_socket->state() != QLocalSocket::ConnectedState) {
         return;
@@ -142,38 +145,34 @@ void WorkspaceTrackerEffect::sendPayload(int desktop, float x, float y, KWin::Lo
 
 void WorkspaceTrackerEffect::sendFullState()
 {
-    const auto outputs = KWin::effects->screens();
-    for (KWin::LogicalOutput* output : outputs) {
-        if (KWin::VirtualDesktop* desktop = KWin::effects->currentDesktop(output)) {
-            sendPayload(static_cast<int>(desktop->x11DesktopNumber()), 0.0f, 0.0f, output);
-        }
+    // No per-output desktop on this KWin -- one global current desktop,
+    // reported with a null output so the shell applies it to every screen.
+    if (KWin::VirtualDesktop* desktop = KWin::effects->currentDesktop()) {
+        sendPayload(static_cast<int>(desktop->x11DesktopNumber()), 0.0f, 0.0f, nullptr);
     }
 }
 
 void WorkspaceTrackerEffect::onDesktopChanging(
-    KWin::VirtualDesktop* desktop, QPointF offset, KWin::EffectWindow* with, KWin::LogicalOutput* output)
+    KWin::VirtualDesktop* desktop, QPointF offset, KWin::EffectWindow* with)
 {
     Q_UNUSED(with)
-    m_lastChangingOutput = output;
     if (desktop && m_socket->state() == QLocalSocket::ConnectedState) {
-        sendPayload(desktop->x11DesktopNumber(), static_cast<float>(offset.x()), static_cast<float>(offset.y()), output);
+        sendPayload(desktop->x11DesktopNumber(), static_cast<float>(offset.x()), static_cast<float>(offset.y()), nullptr);
     }
 }
 
 void WorkspaceTrackerEffect::onDesktopChangingCancelled()
 {
-    sendPayload(0, 0.0f, 0.0f, m_lastChangingOutput);
-    m_lastChangingOutput = nullptr;
+    sendPayload(0, 0.0f, 0.0f, nullptr);
 }
 
 void WorkspaceTrackerEffect::onDesktopChanged(
-    KWin::VirtualDesktop* oldDesktop, KWin::VirtualDesktop* newDesktop, KWin::EffectWindow* with, KWin::LogicalOutput* output)
+    KWin::VirtualDesktop* oldDesktop, KWin::VirtualDesktop* newDesktop, KWin::EffectWindow* with)
 {
     Q_UNUSED(oldDesktop)
     Q_UNUSED(with)
-    m_lastChangingOutput = nullptr;
     if (newDesktop && m_socket->state() == QLocalSocket::ConnectedState) {
-        sendPayload(newDesktop->x11DesktopNumber(), 0.0f, 0.0f, output);
+        sendPayload(newDesktop->x11DesktopNumber(), 0.0f, 0.0f, nullptr);
     }
 }
 
