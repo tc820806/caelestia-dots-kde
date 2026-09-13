@@ -44,7 +44,7 @@ fi
 echo "  Creating Caelestia Shell autostart entry..."
 cat > "$HOME/.local/bin/caelestia-autostart.sh" << EOF
 #!/bin/bash
-export QML2_IMPORT_PATH="\$HOME/.local/lib/qt6/qml:\$HOME/.config/quickshell/caelestia"
+export QML2_IMPORT_PATH="\$HOME/.local/lib/qt6/qml:\$HOME/.config/quickshell/caelestia:\$(qtpaths6 --query QT_INSTALL_QML)"
 export CAELESTIA_LIB_DIR="\$HOME/.local/lib/caelestia"
 export QS_NO_RELOAD_POPUP=1
 export QS_DROP_EXPENSIVE_FONTS=1

@@ -516,7 +516,7 @@ if grep -q "QML2_IMPORT_PATH" ~/.bashrc; then
         sed -i '/QML2_IMPORT_PATH/ s|\(.*[^"]\)\("*\)$|\1:$HOME/.config/quickshell/caelestia\2|' ~/.bashrc
     fi
 else
-    echo 'export QML2_IMPORT_PATH="$HOME/.local/lib/qt6/qml:$HOME/.config/quickshell/caelestia"' >> ~/.bashrc
+    echo 'export QML2_IMPORT_PATH="$HOME/.local/lib/qt6/qml:$HOME/.config/quickshell/caelestia:$(qtpaths6 --query QT_INSTALL_QML)"' >> ~/.bashrc
 fi
 
 if ! grep -q "CAELESTIA_LIB_DIR" ~/.bashrc; then
@@ -529,7 +529,7 @@ if [ -f "$HOME/.config/fish/config.fish" ]; then
             sed -i '/QML2_IMPORT_PATH/ s|\(.*[^"]\)\("*\)$|\1:$HOME/.config/quickshell/caelestia\2|' ~/.config/fish/config.fish
         fi
     else
-        echo 'set -gx QML2_IMPORT_PATH "$HOME/.local/lib/qt6/qml:$HOME/.config/quickshell/caelestia"' >> ~/.config/fish/config.fish
+        echo 'set -gx QML2_IMPORT_PATH "$HOME/.local/lib/qt6/qml:$HOME/.config/quickshell/caelestia:(qtpaths6 --query QT_INSTALL_QML)"' >> ~/.config/fish/config.fish
     fi
 
     if ! grep -q "CAELESTIA_LIB_DIR" ~/.config/fish/config.fish; then
@@ -548,7 +548,7 @@ fi
 mkdir -p ~/.config/plasma-workspace/env
 cat > ~/.config/plasma-workspace/env/caelestia-qml-path.sh << 'ENVEOF'
 #!/bin/sh
-export QML2_IMPORT_PATH="$HOME/.local/lib/qt6/qml:$HOME/.config/quickshell/caelestia${QML2_IMPORT_PATH:+:$QML2_IMPORT_PATH}"
+export QML2_IMPORT_PATH="$HOME/.local/lib/qt6/qml:$HOME/.config/quickshell/caelestia:$(qtpaths6 --query QT_INSTALL_QML)${QML2_IMPORT_PATH:+:$QML2_IMPORT_PATH}"
 export CAELESTIA_LIB_DIR="$HOME/.local/lib/caelestia"
 ENVEOF
 chmod +x ~/.config/plasma-workspace/env/caelestia-qml-path.sh
