@@ -1,5 +1,7 @@
 #include "listnode.hpp"
 
+#include <ranges>
+
 #include <qjsonarray.h>
 #include <qjsonobject.h>
 

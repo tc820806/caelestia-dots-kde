@@ -52,7 +52,11 @@ Item {
             readonly property real cos: Math.cos(angle)
             readonly property real sin: Math.sin(angle)
 
-            asynchronous: true
+            // ShapePath.asynchronous is Qt 6.9+; assigning it on Qt 6.8
+            // throws "Cannot assign to non-existent property" and fatally
+            // aborts loading the whole shell config (Shape.asynchronous a
+            // few lines up is a different, long-standing property and is
+            // unaffected).
             capStyle: root.Tokens.rounding.scale === 0 ? ShapePath.SquareCap : ShapePath.RoundCap
             strokeWidth: 360 / GlobalConfig.services.visualiserBars - root.Tokens.spacing.small / 4
             strokeColor: Colours.palette.m3primary

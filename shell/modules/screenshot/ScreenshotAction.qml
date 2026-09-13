@@ -3,7 +3,6 @@ pragma Singleton
 
 import QtQuick
 import QtQuick.Controls
-import Qt.labs.synchronizer
 import Quickshell
 import qs.services
 import qs.utils

@@ -6,6 +6,7 @@ import "components/workspaces"
 import "components/performance"
 import QtQuick
 import QtQuick.Layouts
+import Qt.labs.qmlmodels
 import Quickshell
 import Quickshell.Services.UPower
 import Caelestia.Config

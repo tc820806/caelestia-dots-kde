@@ -2,7 +2,6 @@ import ".."
 import "../../../components/controls"
 import QtQuick
 import QtQuick.Controls
-import Qt.labs.synchronizer
 import Quickshell
 import Quickshell.Io
 import Quickshell.Wayland
@@ -554,15 +553,19 @@ PanelWindow {
             spacing: 6
 
             OptionsToolbar {
-                Synchronizer on action {
-                    property alias source: root.action
-                }
-                Synchronizer on selectionMode {
-                    property alias source: root.selectionMode
-                }
-                Synchronizer on showWindowOutlines {
-                    property alias source: root.showWindowOutlines
-                }
+                // Qt.labs.synchronizer's Synchronizer type is Qt 6.10+ tech
+                // preview and unavailable on Qt 6.8. This reproduces the same
+                // two-way sync manually: the bindings below seed this
+                // instance from root, and the onXChanged handlers write user
+                // interaction (root.action = newAction etc. inside
+                // OptionsToolbar.qml) back out to root.
+                action: root.action
+                selectionMode: root.selectionMode
+                showWindowOutlines: root.showWindowOutlines
+
+                onActionChanged: root.action = action
+                onSelectionModeChanged: root.selectionMode = selectionMode
+                onShowWindowOutlinesChanged: root.showWindowOutlines = showWindowOutlines
 
                 onDismiss: root.dismiss();
             }

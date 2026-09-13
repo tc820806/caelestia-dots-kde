@@ -26,7 +26,9 @@ inline bool isSupportedEnum(const QMetaType& type) {
         return false;
 
     const auto metaEnum = metaEnumFor(type);
-    return metaEnum.isValid() && !metaEnum.is64Bit();
+    // QMetaEnum::is64Bit() was added in Qt 6.9; on earlier Qt the enum's
+    // underlying-type size via QMetaType serves the same purpose here.
+    return metaEnum.isValid() && type.sizeOf() <= static_cast<qsizetype>(sizeof(int));
 }
 
 // Returns the enumerator name for a value, or nullptr if there is no such enumerator

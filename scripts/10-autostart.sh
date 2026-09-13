@@ -51,6 +51,12 @@ export QS_DROP_EXPENSIVE_FONTS=1
 export QS_DISABLE_CRASH_HANDLER=1
 export QSG_RENDER_LOOP=threaded
 export QT_QUICK_FLICKABLE_WHEEL_DECELERATION=10000
+# Works around a Qt 6.8 QML-engine JIT bug (QQmlPropertyCache::createMetaObject /
+# QQmlInterceptorMetaObject::toDynamicMetaObject SIGSEGV) that this build hits
+# reliably on distros still shipping Qt 6.8 (e.g. Debian trixie) when many
+# property-interceptor-bound objects (Behavior/Animation) are created quickly,
+# e.g. typing fast in the launcher's app search. Not needed on Qt 6.9+.
+export QV4_FORCE_INTERPRETER=1
 # Self-heal Caelestia lock screen if KDE updates or kconf_update reset it
 if [ -f "\$HOME/.local/share/plasma/shells/caelestia.desktop/contents/lockscreen/LockScreen.qml" ] || [ -f "/usr/share/plasma/shells/caelestia.desktop/contents/lockscreen/LockScreen.qml" ]; then
     if command -v kreadconfig6 >/dev/null 2>&1 && command -v kwriteconfig6 >/dev/null 2>&1; then

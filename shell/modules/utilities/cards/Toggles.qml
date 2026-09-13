@@ -3,6 +3,7 @@ pragma ComponentBehavior: Bound
 import "../../background"
 import QtQuick
 import QtQuick.Layouts
+import Qt.labs.qmlmodels
 import Quickshell
 import Quickshell.Bluetooth
 import Caelestia.Components

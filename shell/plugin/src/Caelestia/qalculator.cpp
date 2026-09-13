@@ -51,7 +51,7 @@ QString Qalculator::eval(const QString& expr, bool printExpr) const {
     }
 
     if (printExpr) {
-        return QString("%1 = %2").arg(parsed).arg(result);
+        return QString("%1 = %2").arg(QString::fromStdString(parsed), QString::fromStdString(result));
     }
 
     return QString::fromStdString(result);
@@ -110,7 +110,7 @@ void Qalculator::evalAsync(const QString& expr) {
         }
 
         const QString rawStr = QString::fromStdString(result);
-        return { QString("%1 = %2").arg(parsed).arg(result), rawStr };
+        return { QString("%1 = %2").arg(QString::fromStdString(parsed), rawStr), rawStr };
     }).then(this, [this, gen](QPair<QString, QString> result) {
         if (gen != m_generation) {
             return;

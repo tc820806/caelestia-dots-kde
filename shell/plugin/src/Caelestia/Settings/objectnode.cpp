@@ -103,8 +103,10 @@ QSet<QString> ObjectNode::loadFromJson(const QJsonObject& json, QList<Diagnostic
     quarantineKey(key, v);                                                                                             \
     continue
 
-    for (const auto [k, v] : json.asKeyValueRange()) {
-        const auto key = k.toString();
+    for (auto jsonIt = json.begin(); jsonIt != json.end(); ++jsonIt) {
+        const auto& k = jsonIt.key();
+        const auto& v = jsonIt.value();
+        const auto key = k;
         const auto* desc = schema().get(key);
 
         if (!desc) {
