@@ -220,7 +220,7 @@ def run_git(*args: str) -> str:
     return subprocess.check_output(cmd, text=True, stderr=subprocess.DEVNULL)
 
 def fetch_releases() -> list:
-    url = "https://api.github.com/repos/ladybug-me/caelestia-dots-kde/releases?per_page=100"
+    url = "https://api.github.com/repos/ladybug-me/caelestia-kde/releases?per_page=100"
     req = urllib.request.Request(url, headers={"User-Agent": "caelestia-update-checker"})
     try:
         with urllib.request.urlopen(req, timeout=10) as resp:
