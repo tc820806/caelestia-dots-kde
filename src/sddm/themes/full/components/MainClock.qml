@@ -73,7 +73,7 @@ Item {
             anchors.bottom: minuteText.bottom
             anchors.bottomMargin: Math.round(28 * root.centerScale)
             renderType: Text.NativeRendering
-            font.family: "CaskaydiaCove NF"
+            font.family: googleSansFlex.name
             font.pixelSize: Math.max(14, Math.round(28 * root.centerScale))
             font.bold: true
             color: config.secondary
