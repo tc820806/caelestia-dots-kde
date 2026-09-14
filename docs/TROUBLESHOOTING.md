@@ -295,6 +295,46 @@ trigger any of this.
 
 ---
 
+### 3.8 Bar Text Renders as Garbled/Accented Characters
+
+Text in the bar (most visibly the greeter, e.g. "Good Evening, Tony!")
+intermittently renders as garbled Latin-Extended characters with random
+accents instead of the real string. A shell restart
+(`systemctl --user restart app-caelestiashell@autostart.service`) always
+clears it for that session, but it comes back later.
+
+The shell requests the font family `SF Pro` for body/headline/title/label
+text, plus a custom `ROND` variable font axis for the rounded style. `SF Pro`
+and `SF Mono` ship as raw asset files under
+`~/.config/quickshell/caelestia/assets/fonts/`, but — unlike Material Symbols
+Rounded and Rubik, which Quickshell fetches on its own since they're open
+Google Fonts — nothing ever installed these into `~/.local/share/fonts`:
+Apple's fonts are proprietary, so no installer can legally auto-fetch them,
+and this install step was simply missing. Fontconfig then silently
+substitutes Noto Sans for `SF Pro`, and applying the `ROND` axis to that
+substitute (a font it was never designed for) is what corrupts glyph
+rendering.
+
+`scripts/10-autostart.sh` now installs the bundled fonts and adds a
+fontconfig alias (`SF Pro` → `SF Pro Display`, since the bundled files only
+register as `SF Pro Display`/`Text`/`Rounded`, never plain `SF Pro` — that
+name belongs solely to Apple's real variable font). Re-running it fixes an
+existing install:
+
+```bash
+bash scripts/10-autostart.sh
+systemctl --user restart app-caelestiashell@autostart.service
+```
+
+To check by hand whether the fonts are installed and resolving correctly:
+
+```bash
+fc-match "SF Pro"   # should show a file under ~/.local/share/fonts/SF-Pro, not Noto Sans
+fc-match "SF Mono"  # should show a file under ~/.local/share/fonts/SF-Mono
+```
+
+---
+
 ## 4. Runtime Issues — Lock Screen
 
 ### 4.1 Lock Screen Greeter Diagnostic

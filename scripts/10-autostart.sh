@@ -25,6 +25,50 @@ if [[ ! -f "$SHELL_CONFIG" ]]; then
     die "Caelestia Shell entrypoint not found: $SHELL_CONFIG (run scripts/08-build-shell.sh first)"
 fi
 
+# Install bundled SF Pro / SF Mono fonts.
+#
+# These ship as raw asset files under the shell config because Apple's fonts
+# are proprietary and no installer can legally auto-fetch or redistribute
+# them (unlike Material Symbols Rounded / Rubik, which are open Google Fonts
+# Quickshell fetches on first run on its own). Without them installed,
+# fontconfig silently substitutes Noto Sans for the shell's requested
+# "SF Pro" family, and the shell's SF-Pro-specific variable font axis (a
+# custom "ROND" rounding axis, applied via QFont::setVariableAxis) lands on
+# that wrong font instead -- corrupting glyph rendering. Symptom: bar text
+# (e.g. the greeter) renders as garbled accented characters instead of the
+# real string, intermittently, until the shell is restarted.
+FONT_ASSETS_DIR="$HOME/.config/quickshell/caelestia/assets/fonts"
+if [[ -d "$FONT_ASSETS_DIR/SF-Pro" ]]; then
+    echo "  Installing bundled SF Pro / SF Mono fonts..."
+    mkdir -p "$HOME/.local/share/fonts/SF-Pro" "$HOME/.local/share/fonts/SF-Mono"
+    cp -f "$FONT_ASSETS_DIR"/SF-Pro/*.otf "$HOME/.local/share/fonts/SF-Pro/" 2>/dev/null || true
+    cp -f "$FONT_ASSETS_DIR"/SF-Mono/* "$HOME/.local/share/fonts/SF-Mono/" 2>/dev/null || true
+
+    # The bundled files only register as "SF Pro Display" / "SF Pro Text" /
+    # "SF Pro Rounded" -- never plain "SF Pro" (that name belongs solely to
+    # Apple's real variable font, which is what's proprietary and can't be
+    # bundled here). Alias it so fontconfig resolves the shell's "SF Pro"
+    # request to the bundled static family instead of falling through to
+    # Noto Sans.
+    mkdir -p "$HOME/.config/fontconfig/conf.d"
+    cat > "$HOME/.config/fontconfig/conf.d/49-sf-pro-alias.conf" << 'FONTEOF'
+<?xml version="1.0"?>
+<!DOCTYPE fontconfig SYSTEM "fonts.dtd">
+<fontconfig>
+  <match target="pattern">
+    <test name="family"><string>SF Pro</string></test>
+    <edit name="family" mode="prepend" binding="strong">
+      <string>SF Pro Display</string>
+    </edit>
+  </match>
+</fontconfig>
+FONTEOF
+    fc-cache -f "$HOME/.local/share/fonts" >/dev/null 2>&1 || true
+    ok "SF Pro / SF Mono fonts installed."
+else
+    skip "Bundled SF Pro/SF Mono assets not found; skipping font install."
+fi
+
 # Determine the path of quickshell to avoid PATH differences at login.
 if command -v quickshell >/dev/null 2>&1; then
     QUICKSHELL_PATH="$(command -v quickshell)"
