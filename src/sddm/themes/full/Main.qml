@@ -236,7 +236,8 @@ Rectangle {
             anchors.bottom: parent.bottom
             color: config.text
             text: mainCard.day + " • " + mainCard.date
-            font.pixelSize: 22
+            font.pixelSize: 25
+            font.letterSpacing: 2
             font.family: googleSansFlex.name
             font.bold: true
             font.variableAxes: mainCard.fontAxesTitle
