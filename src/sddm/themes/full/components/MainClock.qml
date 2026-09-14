@@ -41,7 +41,13 @@ Item {
             font.variableAxes: root.fontAxesHours
             font.pixelSize: Math.round(224 * root.centerScale)
             color: Qt.lighter(config.primary, 1.6)
-            text: Qt.formatTime(root.currentTime, "hh")
+            text: {
+                if (!root.ap)
+                    return Qt.formatTime(root.currentTime, "hh");
+                var h = root.currentTime.getHours() % 12;
+                if (h === 0) h = 12;
+                return h < 10 ? "0" + h : "" + h;
+            }
         }
 
         Item {
@@ -58,6 +64,20 @@ Item {
             font.pixelSize: Math.round(224 * root.centerScale)
             color: config.secondary
             text: Qt.formatTime(root.currentTime, "mm")
+        }
+
+        Text {
+            id: amPmText
+
+            visible: root.ap
+            anchors.bottom: minuteText.bottom
+            anchors.bottomMargin: Math.round(28 * root.centerScale)
+            renderType: Text.NativeRendering
+            font.family: "CaskaydiaCove NF"
+            font.pixelSize: Math.max(14, Math.round(28 * root.centerScale))
+            font.bold: true
+            color: config.secondary
+            text: root.currentTime.getHours() >= 12 ? "PM" : "AM"
         }
     }
 
