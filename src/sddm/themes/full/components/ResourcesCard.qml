@@ -156,7 +156,6 @@ Item {
 
             readonly property real strokeW: Math.max(4, width * 0.09)
 
-            onFractionChanged: requestPaint()
             Connections {
                 target: gauge
                 function onFractionChanged() { canvas.requestPaint(); }
