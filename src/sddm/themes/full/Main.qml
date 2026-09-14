@@ -411,9 +411,8 @@ Rectangle {
                     radius: root.smallRadius
                     opacity: root.firstInput ? 0 : root.mainCardComponentsOpacity
 
-                    RandomQuote {
-                        maxWidth: topRightRect.width - 40
-                        color: config.text
+                    ResourcesCard {
+                        anchors.fill: parent
                     }
 
                     Behavior on opacity {

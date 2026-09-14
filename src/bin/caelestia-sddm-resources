@@ -1,0 +1,125 @@
+#!/usr/bin/env python3
+"""Samples CPU/GPU/RAM/disk usage and temperatures for the SDDM greeter's
+resources card and writes them to a world-readable JSON snapshot.
+
+The SDDM greeter runs as its own system user (sddm) with no access to the
+logged-in user's home directory or session services, so this runs as a
+regular user-level systemd timer and drops its output in /tmp where the
+greeter can read it back via QML_XHR_ALLOW_FILE_READ.
+"""
+
+import json
+import os
+import time
+import subprocess
+
+OUT_PATH = "/tmp/caelestia-sddm-resources.json"
+
+
+def cpu_percent():
+    def read():
+        with open("/proc/stat") as f:
+            vals = list(map(int, f.readline().split()[1:]))
+        idle = vals[3] + vals[4]
+        return idle, sum(vals)
+
+    idle1, total1 = read()
+    time.sleep(0.2)
+    idle2, total2 = read()
+    dt = total2 - total1
+    di = idle2 - idle1
+    return round(100 * (dt - di) / dt) if dt > 0 else 0
+
+
+def cpu_temp():
+    try:
+        out = subprocess.run(
+            ["sensors", "-j"], capture_output=True, text=True, timeout=2
+        ).stdout
+        data = json.loads(out)
+        for chip, sensors in data.items():
+            if "coretemp" not in chip and "k10temp" not in chip:
+                continue
+            for label, vals in sensors.items():
+                if not isinstance(vals, dict):
+                    continue
+                if not any(k in label.lower() for k in ("package", "tdie", "tctl")):
+                    continue
+                for k, v in vals.items():
+                    if k.endswith("_input"):
+                        return round(v)
+    except Exception:
+        pass
+
+    try:
+        base = "/sys/class/thermal"
+        for zone in sorted(os.listdir(base)):
+            if not zone.startswith("thermal_zone"):
+                continue
+            with open(os.path.join(base, zone, "type")) as f:
+                ztype = f.read().strip().lower()
+            if "x86_pkg_temp" in ztype or "cpu" in ztype:
+                with open(os.path.join(base, zone, "temp")) as f:
+                    return round(int(f.read().strip()) / 1000)
+    except Exception:
+        pass
+    return None
+
+
+def gpu_stats():
+    try:
+        out = subprocess.run(
+            [
+                "nvidia-smi",
+                "--query-gpu=utilization.gpu,temperature.gpu",
+                "--format=csv,noheader,nounits",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=2,
+        ).stdout.strip()
+        util, temp = (x.strip() for x in out.split(","))
+        return int(util), int(temp)
+    except Exception:
+        return None, None
+
+
+def ram_percent():
+    info = {}
+    with open("/proc/meminfo") as f:
+        for line in f:
+            k, v = line.split(":", 1)
+            info[k.strip()] = int(v.strip().split()[0])
+    total = info.get("MemTotal", 0)
+    avail = info.get("MemAvailable", 0)
+    return round(100 * (total - avail) / total) if total > 0 else 0
+
+
+def disk_percent(path="/"):
+    st = os.statvfs(path)
+    total = st.f_blocks * st.f_frsize
+    free = st.f_bavail * st.f_frsize
+    return round(100 * (total - free) / total) if total > 0 else 0
+
+
+def main():
+    gpu_util, gpu_temp = gpu_stats()
+    data = {
+        "cpu": cpu_percent(),
+        "cpuTemp": cpu_temp(),
+        "gpu": gpu_util,
+        "gpuTemp": gpu_temp,
+        "ram": ram_percent(),
+        "disk": disk_percent(),
+        "ts": int(time.time()),
+    }
+
+    tmp_path = OUT_PATH + ".tmp"
+    with open(tmp_path, "w") as f:
+        json.dump(data, f)
+    os.chmod(tmp_path, 0o644)
+    os.replace(tmp_path, OUT_PATH)
+
+
+if __name__ == "__main__":
+    main()

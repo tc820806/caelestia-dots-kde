@@ -130,6 +130,39 @@ Current=caelestia
 DROPIN
 ok "SDDM config drop-in created."
 
+#  Live resources sampler for the greeter's ResourcesCard
+# The greeter runs as the sddm system user with no access to this user's
+# session or home directory, so a user-level timer samples CPU/GPU/RAM/disk
+# and drops a world-readable snapshot in /tmp for the greeter to read back.
+info "Setting up SDDM resources sampler..."
+mkdir -p "$HOME/.local/bin"
+cp "$SRC_DIR/../bin/caelestia-sddm-resources" "$HOME/.local/bin/caelestia-sddm-resources"
+chmod 755 "$HOME/.local/bin/caelestia-sddm-resources"
+
+mkdir -p "$HOME/.config/systemd/user"
+cat > "$HOME/.config/systemd/user/caelestia-sddm-resources.service" << 'EOF'
+[Unit]
+Description=Sample system resources for the SDDM greeter
+
+[Service]
+Type=oneshot
+ExecStart=%h/.local/bin/caelestia-sddm-resources
+EOF
+cat > "$HOME/.config/systemd/user/caelestia-sddm-resources.timer" << 'EOF'
+[Unit]
+Description=Timer for the SDDM greeter resources sampler
+
+[Timer]
+OnStartupSec=5s
+OnUnitActiveSec=3s
+
+[Install]
+WantedBy=timers.target
+EOF
+systemctl --user daemon-reload
+systemctl --user enable --now caelestia-sddm-resources.timer 2>/dev/null || true
+ok "SDDM resources sampler enabled."
+
 POSTHOOK_CMD="sudo $SYNC_SCRIPT --posthook"
 CLI_JSON="$HOME/.config/caelestia/cli.json"
 
